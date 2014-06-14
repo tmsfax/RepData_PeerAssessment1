@@ -1,0 +1,109 @@
+Reproducible Data, Week 2 Project
+-----
+
+
+```{r}
+library(stringr)
+library(ggplot2)
+```
+
+# Loading the Data
+
+```{r}
+unzip("activity.zip")
+rawData = read.csv("activity.csv")
+rawData$datetime = strptime(paste(rawData$date, str_pad(rawData$interval, 4, pad = "0")), "%Y-%m-%d %H%M")
+str(rawData)
+```
+
+# Some Basic Statistics
+
+```{r}
+stepsByDate = tapply(rawData$steps, rawData$date, sum, na.rm = T)
+qplot(stepsByDate, geom = "histogram", binwidth = 1000)
+```
+
+The mean is of the steps taken per day is `r mean(stepsByDate)` and the median is `r median(stepsByDate)`.
+
+Ignoring days that have zero steps (those days are all NA), the mean is `r mean(stepsByDate[stepsByDate != 0])` and the median is `r median(stepsByDate[stepsByDate != 0])`.
+
+# Average Daily Activity Pattern
+
+This plot shows the means steps across all days, for each 5-minute interval.
+
+```{r}
+temp = tapply(rawData$steps, rawData$interval, mean, na.rm = T)
+meanStepsByInterval = data.frame(
+    interval = strptime(str_pad(names(temp), 4, pad = "0"), "%H%M"),
+    mean = temp)
+qplot(data = meanStepsByInterval, interval, mean, geom = "line")
+```
+
+This shows the interval with the largest mean number of steps across all days.
+
+```{r}
+meanStepsByInterval[which.max(meanStepsByInterval$mean),]
+```
+
+# Imputing Missing Values
+
+Whenever a value is missing, we are going to replace the NA with the mean number of steps across all days that have values.
+
+There are `r sum(is.na(rawData$steps))` values missing.
+
+```{r}
+means = meanStepsByInterval[as.character(rawData$interval), "mean"]
+imputedData = rawData
+missingIndices = is.na(rawData$steps)
+imputedData[missingIndices, "steps"] = means[missingIndices]
+head(rawData)
+head(imputedData)
+```
+
+# Some Basic Statistics on the Imputed Data
+
+```{r}
+stepsByDate = tapply(imputedData$steps, imputedData$date, sum)
+qplot(stepsByDate, geom = "histogram", binwidth = 1000)
+```
+
+The mean is of the steps taken per day is `r mean(stepsByDate)` and the median is `r median(stepsByDate)`.
+
+# Average Daily Activity Pattern
+
+This plot shows the means steps across all days, for each 5-minute interval.
+
+```{r}
+temp = tapply(imputedData$steps, imputedData$interval, mean)
+meanStepsByInterval = data.frame(
+    interval = strptime(str_pad(names(temp), 4, pad = "0"), "%H%M"),
+    mean = temp)
+qplot(data = meanStepsByInterval, interval, mean, geom = "line")
+```
+
+Since days were either entirely NA or not, imputing values using the mean across all days had little impact on the summary statistics about the data. i.e., The total per day and mean per interval did not change. The median was pulled closer to the mean since so many new days are now exactly equal to the mean. The only impact to the histogram was to change the days with zero (NA) steps to days with the mean steps.
+
+# Comparing Weekdays to Weekends
+
+```{r}
+isWeekend = weekdays(imputedData$datetime) %in% c("Saturday", "Sunday")
+temp = tapply(imputedData$steps[isWeekend], imputedData$interval[isWeekend], mean)
+meanStepsByIntervalForWeekends = data.frame(
+    interval = strptime(str_pad(names(temp), 4, pad = "0"), "%H%M"),
+    mean = temp,
+    typeofday = "weekend",
+    stringsAsFactors = F
+    )
+temp = tapply(imputedData$steps[!isWeekend], imputedData$interval[!isWeekend], mean)
+meanStepsByIntervalForWeekdays = data.frame(
+    interval = strptime(str_pad(names(temp), 4, pad = "0"), "%H%M"),
+    mean = temp,
+    typeofday = "weekday",
+    stringsAsFactors = F
+    )
+dayOfWeekData = rbind(meanStepsByIntervalForWeekends, meanStepsByIntervalForWeekdays)
+dayOfWeekData$typeofday = factor(dayOfWeekData$typeofday)
+qplot(data = dayOfWeekData, interval, mean, geom = "line", facets = typeofday ~ .)
+```
+
+Weekday and weekend activity is noticably different, with the largest differences being at the start of the day.
